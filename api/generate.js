@@ -17,7 +17,6 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // 최신 GoogleGenAI 클라이언트 생성
     const ai = new GoogleGenAI({ apiKey });
 
     const prompt = `
@@ -25,18 +24,14 @@ module.exports = async function handler(req, res) {
 사용자 기분/원하는 분위기: "${mood}"
 
 [요청 사항]
-1. 구글 검색을 활용하여 위 위도/경도 근처에서 **현재 정상 영업 중인 실제 음식점 3곳**을 찾으세요.
-2. **폐업했거나 영업을 중단한 식당은 절대로 포함하지 마세요.**
-3. 검증된 실제 매장명과 대표 메뉴, 그리고 사용자의 기분에 왜 어울리는지 이유를 명확하고 친절하게 설명해 주세요.
+1. 위 위도/경도 위치 근처에서 사용자의 기분에 어울리는 대표 맛집 3곳을 추천해 주세요.
+2. 각 매장명과 대표 메뉴, 그 이유를 친절하게 설명해 주세요.
 `;
 
-    // gemini-3.1-flash-lite 모델 호출 및 구글 검색 도구 설정
+    // 💡 tools(구글 검색) 옵션을 제거하면 무료 API 키에서도 429 에러가 사라집니다.
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }]
-      }
+      model: 'gemini-2.0-flash', 
+      contents: prompt
     });
 
     return res.status(200).json({ result: response.text });
