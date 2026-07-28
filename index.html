@@ -57,7 +57,7 @@
       const [nickname, setNickname] = useState('');
       const [comment, setComment] = useState('');
 
-      // Geolocation & Reverse Geocoding
+      // Geolocation
       useEffect(() => {
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
@@ -66,7 +66,6 @@
               const lng = pos.coords.longitude;
               setLocation({ lat, lng });
 
-              // 위치 명확화를 위한 역지오코딩
               try {
                 const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14`);
                 const geoData = await geoRes.json();
@@ -84,7 +83,7 @@
         }
       }, []);
 
-      // Firebase
+      // Firebase Subscription
       useEffect(() => {
         const checkFirebase = setInterval(() => {
           if (window.Firebase) {
@@ -125,6 +124,7 @@
               mood: mood.trim() 
             })
           });
+          
           const data = await res.json();
           if (res.ok && Array.isArray(data.result)) {
             setPlaces(data.result);
@@ -132,7 +132,7 @@
             alert(data.error || "추천을 불러오는 중 오류가 발생했습니다.");
           }
         } catch (err) { 
-          alert("서버와 통신할 수 없습니다."); 
+          alert("서버 통신 실패: " + err.message); 
         } finally {
           setLoading(false);
         }
@@ -220,7 +220,7 @@
               </button>
             </div>
 
-            {/* 💡 가로 3열 카드 형태로 개선된 AI 결과 영역 */}
+            {/* AI RESULT - CARD GRID */}
             {places.length > 0 && (
               <div class="max-w-6xl mx-auto mt-16">
                 <div class="flex items-center justify-between mb-8">
@@ -264,7 +264,7 @@
             )}
           </section>
 
-          {/* COMMUNITY FEED SECTION */}
+          {/* COMMUNITY FEED */}
           <main class="max-w-6xl mx-auto px-6 py-16 w-full grid grid-cols-1 lg:grid-cols-12 gap-12">
             <div id="community-section" class="lg:col-span-8 scroll-mt-28">
               <div class="flex items-center justify-between mb-8">
