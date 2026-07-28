@@ -25,17 +25,7 @@ module.exports = async function handler(req, res) {
 
 [요청 사항]
 1. 위 위치 근처에서 현재 정상 영업 중인 실제 음식점 3곳을 추천하세요.
-2. 마크다운이나 다른 설명 문구 없이, 오직 아래 JSON 배열 양식으로만 응답하세요.
-
-[응답 JSON 양식]
-[
-  {
-    "name": "식당 이름",
-    "category": "음식 카테고리 (예: 한식, 이탈리안)",
-    "menu": "대표 메뉴명",
-    "reason": "추천 이유 (2~3문장)"
-  }
-]
+2. 매장명과 대표 메뉴, 사용자의 기분에 어울리는 이유를 친절하게 설명해 주세요.
 `;
 
     const response = await ai.models.generateContent({
@@ -43,14 +33,7 @@ module.exports = async function handler(req, res) {
       contents: prompt,
     });
 
-    let rawText = response.text || '';
-    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      throw new Error('JSON 구조 생성 실패');
-    }
-
-    const places = JSON.parse(jsonMatch[0]);
-    return res.status(200).json({ result: places });
+    return res.status(200).json({ result: response.text });
   } catch (error) {
     console.error('Gemini API Error:', error);
     return res.status(500).json({ error: error.message });
