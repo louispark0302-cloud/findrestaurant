@@ -61,6 +61,8 @@
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition((pos) => {
             setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          }, (err) => {
+            console.error("위치 가져오기 실패:", err);
           });
         }
       }, []);
@@ -82,20 +84,37 @@
 
       // AI Recommendation
       const getRecommendation = async (e) => {
-        e.preventDefault();
-        if (!mood.trim() || !location) return;
+        if (e) e.preventDefault();
+        
+        if (!mood.trim()) {
+          alert('기분이나 원하는 음식을 입력해주세요!');
+          return;
+        }
+
         setLoading(true);
         setResult('');
+
+        // 위치 정보가 없는 경우 기본 위치(서울) 전달
+        const lat = location ? location.lat : 37.5665;
+        const lng = location ? location.lng : 126.9780;
+
         try {
           const res = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ latitude: location.lat, longitude: location.lng, mood })
+            body: JSON.stringify({ latitude: lat, longitude: lng, mood: mood.trim() })
           });
           const data = await res.json();
-          setResult(data.result);
-        } catch (err) { alert("추천 실패"); }
-        setLoading(false);
+          if (res.ok) {
+            setResult(data.result);
+          } else {
+            alert(data.error || "추천을 불러오는 중 오류가 발생했습니다.");
+          }
+        } catch (err) { 
+          alert("서버와 통신할 수 없습니다."); 
+        } finally {
+          setLoading(false);
+        }
       };
 
       // Feedback Submit
@@ -124,7 +143,7 @@
                 <a href="#" class="header-link">Mood Map</a>
               </nav>
               <div class="flex items-center gap-5 text-slate-500">
-                <i class={`fa-solid fa-location-dot ${location ? 'text-emerald-500' : ''}`}></i>
+                <i class={`fa-solid fa-location-dot ${location ? 'text-emerald-500' : 'text-slate-300'}`}></i>
                 <i class="fa-regular fa-circle-user text-xl"></i>
               </div>
             </div>
@@ -147,15 +166,30 @@
                   type="text" 
                   value={mood}
                   onChange={(e) => setMood(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') getRecommendation(e); }}
                   placeholder="지금 어떤 기분이신가요? 혹은 먹고 싶은 음식을 말해주세요"
                   class="w-full h-16 pl-8 pr-20 rounded-full border border-slate-200 search-shadow focus:outline-none focus:ring-2 focus:ring-[#B23D1F]/20 text-slate-700 transition-all"
                 />
-                <button type="submit" class="absolute right-2 top-2 w-12 h-12 bg-[#B23D1F] text-white rounded-full flex items-center justify-center hover:bg-[#8e3119] transition-colors">
-                  {loading ? <i class="fa-solid fa-spinner animate-spin"></i> : <i class="fa-solid fa-magnifying-glass"></i>}
+                {/* 💡 돋보기 버튼 클릭 이벤트 및 타입 명시 수정 */}
+                <button 
+                  type="button"
+                  onClick={getRecommendation} 
+                  disabled={loading}
+                  class="absolute right-2 top-2 w-12 h-12 bg-[#B23D1F] text-white rounded-full flex items-center justify-center hover:bg-[#8e3119] transition-colors cursor-pointer disabled:bg-slate-300"
+                >
+                  {loading ? (
+                    <i class="fa-solid fa-spinner animate-spin"></i>
+                  ) : (
+                    <i class="fa-solid fa-magnifying-glass pointer-events-none"></i>
+                  )}
                 </button>
               </form>
               
-              <button onClick={() => {setMood(''); setResult('');}} class="text-slate-400 text-sm flex items-center gap-2 mx-auto hover:text-slate-600 transition-colors">
+              <button 
+                type="button"
+                onClick={() => {setMood(''); setResult('');}} 
+                class="text-slate-400 text-sm flex items-center gap-2 mx-auto hover:text-slate-600 transition-colors"
+              >
                 <i class="fa-solid fa-rotate-right"></i> 다시 시작하기
               </button>
             </div>
@@ -182,7 +216,7 @@
                 <a href="#" class="text-[#B23D1F] text-sm font-medium flex items-center gap-1">전체 보기 <i class="fa-solid fa-chevron-right text-[10px]"></i></a>
               </div>
 
-              {/* POST INPUT (Firebase 연동) */}
+              {/* POST INPUT */}
               <div class="bg-white border border-slate-100 rounded-3xl p-6 mb-12 shadow-sm">
                 <form onSubmit={postFeedback} class="space-y-4">
                   <div class="flex gap-4">
@@ -208,7 +242,7 @@
 
               {/* FEED LIST */}
               <div class="space-y-8">
-                {feedbacks.length > 0 ? feedbacks.map((fb, idx) => (
+                {feedbacks.length > 0 ? feedbacks.map((fb) => (
                   <div key={fb.id} class="bg-white border border-slate-100 rounded-3xl p-8 hover:shadow-md transition-shadow">
                     <div class="flex items-center gap-4 mb-6">
                       <div class="w-12 h-12 rounded-full bg-[#B23D1F]/10 flex items-center justify-center text-[#B23D1F] font-bold">
@@ -233,19 +267,23 @@
 
             {/* RIGHT: SIDEBAR */}
             <aside class="lg:col-span-4 space-y-8">
-              {/* KEYWORDS */}
               <div class="bg-slate-50/50 rounded-3xl p-8 border border-slate-100">
                 <div class="flex items-center gap-2 mb-6 text-slate-800 font-bold">
                   <i class="fa-solid fa-arrow-trend-up text-[#B23D1F]"></i> 오늘의 인기 키워드
                 </div>
                 <div class="flex flex-wrap gap-2">
                   {['혼밥하기좋은', '데이트코스', '가성비맛집', '분위기깡패', '비오는날추천', '스트레스해소'].map(tag => (
-                    <span key={tag} class="px-4 py-2 bg-white border border-slate-200 rounded-full text-xs text-slate-600 hover:border-[#B23D1F]/30 cursor-pointer transition-all">#{tag}</span>
+                    <span 
+                      key={tag} 
+                      onClick={() => setMood(tag)}
+                      class="px-4 py-2 bg-white border border-slate-200 rounded-full text-xs text-slate-600 hover:border-[#B23D1F]/30 cursor-pointer transition-all"
+                    >
+                      #{tag}
+                    </span>
                   ))}
                 </div>
               </div>
 
-              {/* STATS */}
               <div class="bg-slate-50/50 rounded-3xl p-8 border border-slate-100">
                 <div class="flex items-center gap-2 mb-8 text-slate-800 font-bold">
                   <i class="fa-regular fa-chart-bar text-[#B23D1F]"></i> 커뮤니티 통계
@@ -259,55 +297,15 @@
                     <span class="text-sm text-slate-500">실시간 접속자</span>
                     <span class="text-xl font-bold text-slate-800">1,024</span>
                   </div>
-                  <div class="flex justify-between items-center">
-                    <span class="text-sm text-slate-500">누적 미식 제안</span>
-                    <span class="text-xl font-bold text-slate-800">45.2k</span>
-                  </div>
                 </div>
-              </div>
-
-              {/* APP PROMO */}
-              <div class="bg-[#B23D1F] rounded-3xl p-8 text-white relative overflow-hidden group">
-                <div class="relative z-10">
-                  <h3 class="text-2xl font-bold mb-2">MoodFood App</h3>
-                  <p class="text-white/70 text-sm mb-8 font-light">내 손안의 미식 컨시어지를 모바일로 경험해보세요.</p>
-                  <button class="w-full py-4 bg-white text-[#B23D1F] rounded-xl font-bold text-sm hover:bg-slate-50 transition-all">앱 다운로드</button>
-                </div>
-                <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all"></div>
               </div>
             </aside>
           </main>
 
           {/* FOOTER */}
-          <footer class="mt-auto border-t border-slate-100 py-20 px-6">
-            <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12">
-              <div class="col-span-2">
-                <div class="text-2xl font-black text-[#B23D1F] mb-6">MoodFood</div>
-                <p class="text-slate-400 text-sm leading-relaxed max-w-xs">
-                  당신의 오늘을 가장 맛있는 기분으로 채워보세요. 디지털 미식 컨시어지 무드푸드.
-                </p>
-              </div>
-              <div>
-                <h4 class="font-bold text-slate-800 mb-6 uppercase tracking-widest text-xs">Discover</h4>
-                <ul class="text-slate-500 text-sm space-y-4 font-light">
-                  <li><a href="#" class="hover:text-[#B23D1F]">Mood Search</a></li>
-                  <li><a href="#" class="hover:text-[#B23D1F]">Best Curation</a></li>
-                </ul>
-              </div>
-              <div>
-                <h4 class="font-bold text-slate-800 mb-6 uppercase tracking-widest text-xs">Company</h4>
-                <ul class="text-slate-500 text-sm space-y-4 font-light">
-                  <li><a href="#" class="hover:text-[#B23D1F]">About Us</a></li>
-                  <li><a href="#" class="hover:text-[#B23D1F]">Contact</a></li>
-                </ul>
-              </div>
-            </div>
-            <div class="max-w-6xl mx-auto mt-20 pt-10 border-t border-slate-50 flex flex-col md:flex-row justify-between items-center gap-6">
-              <p class="text-slate-300 text-xs">© 2024 MoodFood. Your Digital Culinary Concierge.</p>
-              <div class="flex gap-6 text-slate-400">
-                <i class="fa-brands fa-instagram hover:text-[#B23D1F] cursor-pointer"></i>
-                <i class="fa-brands fa-twitter hover:text-[#B23D1F] cursor-pointer"></i>
-              </div>
+          <footer class="mt-auto border-t border-slate-100 py-12 px-6">
+            <div class="max-w-6xl mx-auto text-center text-slate-400 text-xs">
+              © 2026 MoodFood. Your Digital Culinary Concierge.
             </div>
           </footer>
         </div>
