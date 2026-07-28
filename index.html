@@ -32,6 +32,7 @@
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+    html { scroll-behavior: smooth; } /* 💡 부드러운 스크롤 적용 */
     body { font-family: 'Noto Sans KR', sans-serif; background-color: #ffffff; }
     .search-shadow { box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
     .header-link { position: relative; transition: color 0.3s; }
@@ -59,11 +60,13 @@
       // Geolocation
       useEffect(() => {
         if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition((pos) => {
-            setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          }, (err) => {
-            console.error("위치 가져오기 실패:", err);
-          });
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+            }, 
+            (err) => console.error("위치 정보 수집 실패:", err),
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          );
         }
       }, []);
 
@@ -94,15 +97,28 @@
         setLoading(true);
         setResult('');
 
-        // 위치 정보가 없는 경우 기본 위치(서울) 전달
         const lat = location ? location.lat : 37.5665;
         const lng = location ? location.lng : 126.9780;
 
         try {
+          let addressName = '';
+          try {
+            const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14`);
+            const geoData = await geoRes.json();
+            addressName = geoData.display_name || '';
+          } catch (err) {
+            console.warn('역지오코딩 실패');
+          }
+
           const res = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ latitude: lat, longitude: lng, mood: mood.trim() })
+            body: JSON.stringify({ 
+              latitude: lat, 
+              longitude: lng, 
+              address: addressName, 
+              mood: mood.trim() 
+            })
           });
           const data = await res.json();
           if (res.ok) {
@@ -130,17 +146,31 @@
         setNickname(''); setComment('');
       };
 
+      // 💡 커뮤니티 섹션으로 이동시키는 스크롤 함수
+      const scrollToCommunity = (e) => {
+        e.preventDefault();
+        const element = document.getElementById('community-section');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }
+      };
+
+      // 💡 최상단 디스커버(검색) 섹션으로 이동시키는 스크롤 함수
+      const scrollToDiscover = (e) => {
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+
       return (
         <div class="min-h-screen flex flex-col">
           {/* NAVIGATION */}
           <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100">
             <div class="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
-              <div class="text-2xl font-black text-[#B23D1F] tracking-tight cursor-pointer">MoodFood</div>
+              <div onClick={scrollToDiscover} class="text-2xl font-black text-[#B23D1F] tracking-tight cursor-pointer">MoodFood</div>
               <nav class="hidden md:flex items-center gap-10 text-[15px] font-medium text-slate-600">
-                <a href="#" class="header-link active-link text-[#B23D1F]">Discover</a>
-                <a href="#" class="header-link">Community</a>
-                <a href="#" class="header-link">Collections</a>
-                <a href="#" class="header-link">Mood Map</a>
+                <a href="#" onClick={scrollToDiscover} class="header-link active-link text-[#B23D1F]">Discover</a>
+                {/* 💡 Community 클릭 시 이동 연동 */}
+                <a href="#community-section" onClick={scrollToCommunity} class="header-link hover:text-[#B23D1F]">Community</a>
               </nav>
               <div class="flex items-center gap-5 text-slate-500">
                 <i class={`fa-solid fa-location-dot ${location ? 'text-emerald-500' : 'text-slate-300'}`}></i>
@@ -149,7 +179,7 @@
             </div>
           </header>
 
-          {/* HERO SECTION */}
+          {/* HERO SECTION (DISCOVER) */}
           <section class="pt-24 pb-32 px-6 bg-gradient-to-b from-white to-slate-50">
             <div class="max-w-4xl mx-auto text-center">
               <h1 class="text-5xl font-bold mb-6 tracking-tight">
@@ -166,11 +196,9 @@
                   type="text" 
                   value={mood}
                   onChange={(e) => setMood(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') getRecommendation(e); }}
                   placeholder="지금 어떤 기분이신가요? 혹은 먹고 싶은 음식을 말해주세요"
                   class="w-full h-16 pl-8 pr-20 rounded-full border border-slate-200 search-shadow focus:outline-none focus:ring-2 focus:ring-[#B23D1F]/20 text-slate-700 transition-all"
                 />
-                {/* 💡 돋보기 버튼 클릭 이벤트 및 타입 명시 수정 */}
                 <button 
                   type="button"
                   onClick={getRecommendation} 
@@ -209,11 +237,10 @@
           {/* CONTENT GRID */}
           <main class="max-w-6xl mx-auto px-6 py-20 w-full grid grid-cols-1 lg:grid-cols-12 gap-12">
             
-            {/* LEFT: COMMUNITY FEED */}
-            <div class="lg:col-span-8">
+            {/* LEFT: COMMUNITY FEED (💡 id="community-section" 추가) */}
+            <div id="community-section" class="lg:col-span-8 scroll-mt-28">
               <div class="flex items-center justify-between mb-10">
                 <h2 class="text-3xl font-bold tracking-tight text-slate-800">Community Feed</h2>
-                <a href="#" class="text-[#B23D1F] text-sm font-medium flex items-center gap-1">전체 보기 <i class="fa-solid fa-chevron-right text-[10px]"></i></a>
               </div>
 
               {/* POST INPUT */}
