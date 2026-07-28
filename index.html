@@ -3,23 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>기분 맞춤 맛집 탐색기</title>
+  <title>MoodFood - 오늘 당신의 기분은 어떤가요?</title>
+  
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { 
-      getFirestore, 
-      collection, 
-      addDoc, 
-      query, 
-      orderBy, 
-      onSnapshot, 
-      serverTimestamp 
-    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyA1dL7qYnUnAX70JdI7VpxE4Wopdduvpus",
@@ -30,244 +24,292 @@
       appId: "1:1082818908084:web:ec03195c35ec388a4d2ce1"
     };
 
-    // Firebase 초기화
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // React에서 사용할 수 있도록 window 객체에 바인딩
-    window.Firebase = {
-      db,
-      collection,
-      addDoc,
-      query,
-      orderBy,
-      onSnapshot,
-      serverTimestamp
-    };
+    window.Firebase = { db, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp };
   </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+    body { font-family: 'Noto Sans KR', sans-serif; background-color: #ffffff; }
+    .search-shadow { box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
+    .header-link { position: relative; transition: color 0.3s; }
+    .header-link:after { content: ''; position: absolute; width: 0; height: 2px; bottom: -4px; left: 0; background-color: #B23D1F; transition: width 0.3s; }
+    .header-link:hover:after { width: 100%; }
+    .active-link:after { width: 100%; }
+  </style>
 </head>
-<body class="bg-slate-50 min-h-screen text-slate-800 py-10">
+<body class="text-slate-900">
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect } = React;
 
     function App() {
-      // 맛집 추천 관련 상태
+      // States
       const [mood, setMood] = useState('');
       const [location, setLocation] = useState(null);
-      const [locationError, setLocationError] = useState('');
       const [loading, setLoading] = useState(false);
       const [result, setResult] = useState('');
-
-      // 게시판 관련 상태
+      const [feedbacks, setFeedbacks] = useState([]);
       const [nickname, setNickname] = useState('');
       const [comment, setComment] = useState('');
-      const [feedbacks, setFeedbacks] = useState([]);
-      const [submitting, setSubmitting] = useState(false);
 
-      // 위치 정보 수집
+      // Geolocation
       useEffect(() => {
         if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              setLocation({
-                latitude: pos.coords.latitude,
-                longitude: pos.coords.longitude
-              });
-            },
-            (err) => {
-              setLocationError('위치 정보를 가져올 수 없습니다. 위치 권한을 허용해주세요.');
-            }
-          );
-        } else {
-          setLocationError('이 브라우저는 위치 서비스를 지원하지 않습니다.');
+          navigator.geolocation.getCurrentPosition((pos) => {
+            setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          });
         }
       }, []);
 
-      // Firebase Firestore 게시판 데이터 실시간 구독
+      // Firebase Subscription
       useEffect(() => {
-        const timer = setInterval(() => {
+        const checkFirebase = setInterval(() => {
           if (window.Firebase) {
-            clearInterval(timer);
+            clearInterval(checkFirebase);
             const { db, collection, query, orderBy, onSnapshot } = window.Firebase;
-
             const q = query(collection(db, "feedbacks"), orderBy("createdAt", "desc"));
-            const unsubscribe = onSnapshot(q, (snapshot) => {
-              const list = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-              }));
-              setFeedbacks(list);
-            }, (err) => {
-              console.error("Firestore 연결 오류:", err);
+            onSnapshot(q, (snap) => {
+              setFeedbacks(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             });
-
-            return () => unsubscribe();
           }
         }, 100);
-
-        return () => clearInterval(timer);
+        return () => clearInterval(checkFirebase);
       }, []);
 
-      // AI 맛집 추천 요청
-      const handleSubmit = async (e) => {
+      // AI Recommendation
+      const getRecommendation = async (e) => {
         e.preventDefault();
-        if (!mood.trim()) return alert('현재 기분을 입력해주세요!');
-        if (!location) return alert(locationError || '위치 정보를 불러오는 중입니다.');
-
+        if (!mood.trim() || !location) return;
         setLoading(true);
         setResult('');
-
         try {
           const res = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              latitude: location.latitude,
-              longitude: location.longitude,
-              mood: mood
-            })
+            body: JSON.stringify({ latitude: location.lat, longitude: location.lng, mood })
           });
-
           const data = await res.json();
-          if (res.ok) {
-            setResult(data.result);
-          } else {
-            alert(data.error || '오류가 발생했습니다.');
-          }
-        } catch (err) {
-          alert('서버와 통신 중 오류가 발생했습니다.');
-        } finally {
-          setLoading(false);
-        }
+          setResult(data.result);
+        } catch (err) { alert("추천 실패"); }
+        setLoading(false);
       };
 
-      // 게시판 의견 작성
-      const handleFeedbackSubmit = async (e) => {
+      // Feedback Submit
+      const postFeedback = async (e) => {
         e.preventDefault();
-        if (!comment.trim()) return alert('의견 내용을 입력해 주세요.');
-        if (!window.Firebase) return alert('Firebase를 불러오는 중입니다. 잠시 후 시도해 주세요.');
-
-        setSubmitting(true);
-
-        try {
-          const { db, collection, addDoc, serverTimestamp } = window.Firebase;
-          await addDoc(collection(db, "feedbacks"), {
-            nickname: nickname.trim() || '익명',
-            content: comment.trim(),
-            createdAt: serverTimestamp()
-          });
-
-          setComment('');
-          alert('의견이 성공적으로 등록되었습니다!');
-        } catch (err) {
-          console.error("등록 오류:", err);
-          alert('의견 등록 실패: ' + err.message);
-        } finally {
-          setSubmitting(false);
-        }
+        if (!comment.trim()) return;
+        const { db, collection, addDoc, serverTimestamp } = window.Firebase;
+        await addDoc(collection(db, "feedbacks"), {
+          nickname: nickname || '익명',
+          content: comment,
+          createdAt: serverTimestamp()
+        });
+        setNickname(''); setComment('');
       };
 
       return (
-        <div class="max-w-md mx-auto p-6 bg-white rounded-2xl shadow-xl border border-slate-100 space-y-8">
-          
-          {/* 상단 섹션: AI 추천 기능 */}
-          <div>
-            <h1 class="text-2xl font-bold text-center text-indigo-600 mb-2">🍽️ Mood Food Finder</h1>
-            <p class="text-xs text-center text-slate-500 mb-6">지금 내 기분과 위치에 딱 맞는 맛집 탐색기</p>
-
-            <div class="mb-4 text-xs text-center">
-              {location ? (
-                <span class="text-emerald-600 font-medium">📍 위치 정보 수집 완료</span>
-              ) : (
-                <span class="text-amber-500">{locationError || '📍 위치 정보 가져오는 중...'}</span>
-              )}
+        <div class="min-h-screen flex flex-col">
+          {/* NAVIGATION */}
+          <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100">
+            <div class="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
+              <div class="text-2xl font-black text-[#B23D1F] tracking-tight cursor-pointer">MoodFood</div>
+              <nav class="hidden md:flex items-center gap-10 text-[15px] font-medium text-slate-600">
+                <a href="#" class="header-link active-link text-[#B23D1F]">Discover</a>
+                <a href="#" class="header-link">Community</a>
+                <a href="#" class="header-link">Collections</a>
+                <a href="#" class="header-link">Mood Map</a>
+              </nav>
+              <div class="flex items-center gap-5 text-slate-500">
+                <i class={`fa-solid fa-location-dot ${location ? 'text-emerald-500' : ''}`}></i>
+                <i class="fa-regular fa-circle-user text-xl"></i>
+              </div>
             </div>
+          </header>
 
-            <form onSubmit={handleSubmit} class="space-y-4">
-              <div>
-                <label class="block text-sm font-semibold mb-2">오늘 기분이 어떠신가요?</label>
-                <input
-                  type="text"
+          {/* HERO SECTION */}
+          <section class="pt-24 pb-32 px-6 bg-gradient-to-b from-white to-slate-50">
+            <div class="max-w-4xl mx-auto text-center">
+              <h1 class="text-5xl font-bold mb-6 tracking-tight">
+                오늘 당신의 <span class="text-[#B23D1F]">기분</span>은 어떤가요?
+              </h1>
+              <p class="text-slate-500 text-lg mb-12 font-light leading-relaxed">
+                지친 하루 끝에 따뜻한 위로가 되는 맛,<br/>
+                당신의 감정에 가장 어울리는 한 끼를 제안합니다.
+              </p>
+
+              {/* SEARCH BAR */}
+              <form onSubmit={getRecommendation} class="relative max-w-2xl mx-auto mb-8">
+                <input 
+                  type="text" 
                   value={mood}
                   onChange={(e) => setMood(e.target.value)}
-                  placeholder="예: 비도 오고 센치해, 스트레스 풀 매운 거 필요해"
-                  class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  required
+                  placeholder="지금 어떤 기분이신가요? 혹은 먹고 싶은 음식을 말해주세요"
+                  class="w-full h-16 pl-8 pr-20 rounded-full border border-slate-200 search-shadow focus:outline-none focus:ring-2 focus:ring-[#B23D1F]/20 text-slate-700 transition-all"
                 />
-              </div>
-              <button
-                type="submit"
-                disabled={loading || !location}
-                class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-semibold py-3 rounded-xl transition-all shadow-md"
-              >
-                {loading ? 'AI가 맛집 찾는 중...' : '맞춤 맛집 추천받기'}
+                <button type="submit" class="absolute right-2 top-2 w-12 h-12 bg-[#B23D1F] text-white rounded-full flex items-center justify-center hover:bg-[#8e3119] transition-colors">
+                  {loading ? <i class="fa-solid fa-spinner animate-spin"></i> : <i class="fa-solid fa-magnifying-glass"></i>}
+                </button>
+              </form>
+              
+              <button onClick={() => {setMood(''); setResult('');}} class="text-slate-400 text-sm flex items-center gap-2 mx-auto hover:text-slate-600 transition-colors">
+                <i class="fa-solid fa-rotate-right"></i> 다시 시작하기
               </button>
-            </form>
+            </div>
 
+            {/* AI RESULT DISPLAY */}
             {result && (
-              <div class="mt-6 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
-                <h2 class="font-bold text-indigo-900 mb-2">✨ AI 추천 결과</h2>
-                <div class="text-sm whitespace-pre-wrap leading-relaxed text-slate-700">{result}</div>
+              <div class="max-w-3xl mx-auto mt-12 p-8 bg-white rounded-3xl border border-[#B23D1F]/10 shadow-xl animate-fade-in-up">
+                <div class="flex items-center gap-3 mb-6">
+                  <span class="bg-[#B23D1F] text-white text-xs font-bold px-3 py-1 rounded-full">AI Recommendation</span>
+                  <h3 class="font-bold text-lg">무드푸드가 제안하는 맛집</h3>
+                </div>
+                <div class="text-slate-700 leading-relaxed whitespace-pre-wrap">{result}</div>
               </div>
             )}
-          </div>
+          </section>
 
-          <hr class="border-slate-100" />
+          {/* CONTENT GRID */}
+          <main class="max-w-6xl mx-auto px-6 py-20 w-full grid grid-cols-1 lg:grid-cols-12 gap-12">
+            
+            {/* LEFT: COMMUNITY FEED */}
+            <div class="lg:col-span-8">
+              <div class="flex items-center justify-between mb-10">
+                <h2 class="text-3xl font-bold tracking-tight text-slate-800">Community Feed</h2>
+                <a href="#" class="text-[#B23D1F] text-sm font-medium flex items-center gap-1">전체 보기 <i class="fa-solid fa-chevron-right text-[10px]"></i></a>
+              </div>
 
-          {/* 하단 섹션: Firebase 연동 게시판 */}
-          <div>
-            <h2 class="text-lg font-bold text-slate-800 mb-1">💬 사용자 의견 게시판</h2>
-            <p class="text-xs text-slate-500 mb-4">서비스 이용 후기나 개선할 아이디어를 남겨주세요!</p>
-
-            <form onSubmit={handleFeedbackSubmit} class="space-y-3 mb-6">
-              <input
-                type="text"
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                placeholder="닉네임 (미입력 시 익명)"
-                class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-              <textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="의견을 자유롭게 남겨주세요..."
-                rows="3"
-                class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                required
-              ></textarea>
-              <button
-                type="submit"
-                disabled={submitting}
-                class="w-full bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400 text-white font-medium py-2 rounded-lg text-xs transition-all"
-              >
-                {submitting ? '등록 중...' : '의견 등록하기'}
-              </button>
-            </form>
-
-            {/* 댓글 목록 실시간 표시 */}
-            <div class="space-y-3 max-h-60 overflow-y-auto pr-1">
-              {feedbacks.length === 0 ? (
-                <p class="text-xs text-center text-slate-400 py-4">첫 번째 의견을 작성해 보세요!</p>
-              ) : (
-                feedbacks.map((item) => (
-                  <div key={item.id} class="p-3 bg-slate-50 rounded-lg border border-slate-100 text-xs space-y-1">
-                    <div class="flex justify-between items-center">
-                      <span class="font-semibold text-slate-700">{item.nickname || '익명'}</span>
-                      <span class="text-[10px] text-slate-400">
-                        {item.createdAt?.seconds 
-                          ? new Date(item.createdAt.seconds * 1000).toLocaleDateString('ko-KR') 
-                          : '방금 전'}
-                      </span>
-                    </div>
-                    <p class="text-slate-600 whitespace-pre-wrap">{item.content}</p>
+              {/* POST INPUT (Firebase 연동) */}
+              <div class="bg-white border border-slate-100 rounded-3xl p-6 mb-12 shadow-sm">
+                <form onSubmit={postFeedback} class="space-y-4">
+                  <div class="flex gap-4">
+                    <input 
+                      type="text" 
+                      placeholder="닉네임" 
+                      value={nickname}
+                      onChange={(e) => setNickname(e.target.value)}
+                      class="bg-slate-50 border-none rounded-xl px-4 py-2 text-sm focus:ring-1 focus:ring-[#B23D1F]/30"
+                    />
                   </div>
-                ))
-              )}
-            </div>
-          </div>
+                  <textarea 
+                    placeholder="오늘 맛본 특별한 미식 경험을 공유해 주세요." 
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    class="w-full bg-slate-50 border-none rounded-2xl p-4 text-[15px] focus:ring-1 focus:ring-[#B23D1F]/30 h-28"
+                  ></textarea>
+                  <div class="flex justify-end">
+                    <button class="bg-slate-900 text-white px-6 py-2.5 rounded-full text-sm font-medium hover:bg-slate-800 transition-all">공유하기</button>
+                  </div>
+                </form>
+              </div>
 
+              {/* FEED LIST */}
+              <div class="space-y-8">
+                {feedbacks.length > 0 ? feedbacks.map((fb, idx) => (
+                  <div key={fb.id} class="bg-white border border-slate-100 rounded-3xl p-8 hover:shadow-md transition-shadow">
+                    <div class="flex items-center gap-4 mb-6">
+                      <div class="w-12 h-12 rounded-full bg-[#B23D1F]/10 flex items-center justify-center text-[#B23D1F] font-bold">
+                        {fb.nickname?.[0] || '익'}
+                      </div>
+                      <div>
+                        <div class="font-bold text-slate-800">{fb.nickname || '익명 미식가'}</div>
+                        <div class="text-xs text-slate-400">방금 전</div>
+                      </div>
+                    </div>
+                    <p class="text-slate-600 leading-relaxed mb-6 whitespace-pre-wrap">{fb.content}</p>
+                    <div class="flex gap-2">
+                      <span class="px-3 py-1 bg-slate-50 text-slate-400 text-xs rounded-full">#미식기록</span>
+                      <span class="px-3 py-1 bg-slate-50 text-slate-400 text-xs rounded-full">#오늘의한끼</span>
+                    </div>
+                  </div>
+                )) : (
+                  <div class="text-center py-20 text-slate-300">피드에 첫 기록을 남겨보세요.</div>
+                )}
+              </div>
+            </div>
+
+            {/* RIGHT: SIDEBAR */}
+            <aside class="lg:col-span-4 space-y-8">
+              {/* KEYWORDS */}
+              <div class="bg-slate-50/50 rounded-3xl p-8 border border-slate-100">
+                <div class="flex items-center gap-2 mb-6 text-slate-800 font-bold">
+                  <i class="fa-solid fa-arrow-trend-up text-[#B23D1F]"></i> 오늘의 인기 키워드
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  {['혼밥하기좋은', '데이트코스', '가성비맛집', '분위기깡패', '비오는날추천', '스트레스해소'].map(tag => (
+                    <span key={tag} class="px-4 py-2 bg-white border border-slate-200 rounded-full text-xs text-slate-600 hover:border-[#B23D1F]/30 cursor-pointer transition-all">#{tag}</span>
+                  ))}
+                </div>
+              </div>
+
+              {/* STATS */}
+              <div class="bg-slate-50/50 rounded-3xl p-8 border border-slate-100">
+                <div class="flex items-center gap-2 mb-8 text-slate-800 font-bold">
+                  <i class="fa-regular fa-chart-bar text-[#B23D1F]"></i> 커뮤니티 통계
+                </div>
+                <div class="space-y-6">
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm text-slate-500">오늘 등록된 기록</span>
+                    <span class="text-xl font-bold text-[#B23D1F]">{feedbacks.length}</span>
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm text-slate-500">실시간 접속자</span>
+                    <span class="text-xl font-bold text-slate-800">1,024</span>
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm text-slate-500">누적 미식 제안</span>
+                    <span class="text-xl font-bold text-slate-800">45.2k</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* APP PROMO */}
+              <div class="bg-[#B23D1F] rounded-3xl p-8 text-white relative overflow-hidden group">
+                <div class="relative z-10">
+                  <h3 class="text-2xl font-bold mb-2">MoodFood App</h3>
+                  <p class="text-white/70 text-sm mb-8 font-light">내 손안의 미식 컨시어지를 모바일로 경험해보세요.</p>
+                  <button class="w-full py-4 bg-white text-[#B23D1F] rounded-xl font-bold text-sm hover:bg-slate-50 transition-all">앱 다운로드</button>
+                </div>
+                <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all"></div>
+              </div>
+            </aside>
+          </main>
+
+          {/* FOOTER */}
+          <footer class="mt-auto border-t border-slate-100 py-20 px-6">
+            <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12">
+              <div class="col-span-2">
+                <div class="text-2xl font-black text-[#B23D1F] mb-6">MoodFood</div>
+                <p class="text-slate-400 text-sm leading-relaxed max-w-xs">
+                  당신의 오늘을 가장 맛있는 기분으로 채워보세요. 디지털 미식 컨시어지 무드푸드.
+                </p>
+              </div>
+              <div>
+                <h4 class="font-bold text-slate-800 mb-6 uppercase tracking-widest text-xs">Discover</h4>
+                <ul class="text-slate-500 text-sm space-y-4 font-light">
+                  <li><a href="#" class="hover:text-[#B23D1F]">Mood Search</a></li>
+                  <li><a href="#" class="hover:text-[#B23D1F]">Best Curation</a></li>
+                </ul>
+              </div>
+              <div>
+                <h4 class="font-bold text-slate-800 mb-6 uppercase tracking-widest text-xs">Company</h4>
+                <ul class="text-slate-500 text-sm space-y-4 font-light">
+                  <li><a href="#" class="hover:text-[#B23D1F]">About Us</a></li>
+                  <li><a href="#" class="hover:text-[#B23D1F]">Contact</a></li>
+                </ul>
+              </div>
+            </div>
+            <div class="max-w-6xl mx-auto mt-20 pt-10 border-t border-slate-50 flex flex-col md:flex-row justify-between items-center gap-6">
+              <p class="text-slate-300 text-xs">© 2024 MoodFood. Your Digital Culinary Concierge.</p>
+              <div class="flex gap-6 text-slate-400">
+                <i class="fa-brands fa-instagram hover:text-[#B23D1F] cursor-pointer"></i>
+                <i class="fa-brands fa-twitter hover:text-[#B23D1F] cursor-pointer"></i>
+              </div>
+            </div>
+          </footer>
         </div>
       );
     }
