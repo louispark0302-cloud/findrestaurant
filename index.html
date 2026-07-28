@@ -52,12 +52,11 @@
       const [location, setLocation] = useState(null);
       const [addressName, setAddressName] = useState('');
       const [loading, setLoading] = useState(false);
-      const [result, setResult] = useState('');
+      const [places, setPlaces] = useState([]);
       const [feedbacks, setFeedbacks] = useState([]);
       const [nickname, setNickname] = useState('');
       const [comment, setComment] = useState('');
 
-      // 위치 정보 가져오기
       useEffect(() => {
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
@@ -83,7 +82,6 @@
         }
       }, []);
 
-      // 파이어베이스 댓글 불러오기
       useEffect(() => {
         const checkFirebase = setInterval(() => {
           if (window.Firebase) {
@@ -98,7 +96,6 @@
         return () => clearInterval(checkFirebase);
       }, []);
 
-      // 맛집 추천 요청
       const getRecommendation = async (e) => {
         if (e) e.preventDefault();
         
@@ -108,7 +105,7 @@
         }
 
         setLoading(true);
-        setResult('');
+        setPlaces([]);
 
         const lat = location ? location.lat : 37.5665;
         const lng = location ? location.lng : 126.9780;
@@ -125,8 +122,8 @@
           });
 
           const data = await res.json();
-          if (res.ok) {
-            setResult(data.result);
+          if (res.ok && Array.isArray(data.result)) {
+            setPlaces(data.result);
           } else {
             alert(data.error || "추천 정보를 가져오는 도중 오류가 발생했습니다.");
           }
@@ -137,7 +134,6 @@
         }
       };
 
-      // 댓글 작성
       const postFeedback = async (e) => {
         e.preventDefault();
         if (!comment.trim()) return;
@@ -150,7 +146,6 @@
         setNickname(''); setComment('');
       };
 
-      // 스크롤 이동 함수
       const scrollToCommunity = (e) => {
         e.preventDefault();
         document.getElementById('community-section')?.scrollIntoView({ behavior: 'smooth' });
@@ -159,6 +154,16 @@
       const scrollToDiscover = (e) => {
         e.preventDefault();
         window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+
+      // 🗺️ 네이버 길찾기 URL 생성 함수
+      const getDirectionsUrl = (placeName) => {
+        const dest = encodeURIComponent(placeName);
+        if (location) {
+          // 출발지 좌표(현재 위치) -> 도착지 식당명
+          return `https://map.naver.com/v5/directions/${location.lng},${location.lat},내위치,,ADDRESS_POI/-/-/-/sroute?e=${dest}`;
+        }
+        return `https://map.naver.com/v5/search/${dest}`;
       };
 
       return (
@@ -214,21 +219,62 @@
               
               <button 
                 type="button"
-                onClick={() => {setMood(''); setResult('');}} 
+                onClick={() => {setMood(''); setPlaces([]);}} 
                 class="text-slate-400 text-sm flex items-center gap-2 mx-auto hover:text-slate-600 transition-colors"
               >
                 <i class="fa-solid fa-rotate-right"></i> 다시 시작하기
               </button>
             </div>
 
-            {/* AI RESULT */}
-            {result && (
-              <div class="max-w-3xl mx-auto mt-12 p-8 bg-white rounded-3xl border border-slate-100 shadow-xl">
-                <div class="flex items-center gap-3 mb-4">
+            {/* AI RESULT CARD GRID */}
+            {places.length > 0 && (
+              <div class="max-w-6xl mx-auto mt-12 px-2">
+                <div class="flex items-center gap-3 mb-6">
                   <span class="bg-[#B23D1F] text-white text-xs font-bold px-3 py-1 rounded-full">AI 추천 결과</span>
-                  <h3 class="font-bold text-slate-800 text-lg">당신만을 위한 추천 맞춤 메뉴</h3>
+                  <h3 class="font-bold text-slate-800 text-lg">당신만을 위한 맞춤 맛집 추천</h3>
                 </div>
-                <div class="text-slate-600 leading-relaxed text-sm whitespace-pre-wrap">{result}</div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {places.map((place, idx) => (
+                    <div key={idx} class="bg-white rounded-3xl p-6 border border-slate-100 shadow-md hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+                      <div>
+                        <div class="flex items-center justify-between mb-3">
+                          <span class="text-xs font-bold text-[#B23D1F] bg-[#B23D1F]/10 px-2.5 py-1 rounded-lg">
+                            {place.category || '맛집'}
+                          </span>
+                          <span class="text-xs font-semibold text-slate-400">TOP {idx + 1}</span>
+                        </div>
+                        <h4 class="text-xl font-bold text-slate-800 mb-2">{place.name}</h4>
+                        <div class="text-xs font-medium text-slate-500 mb-4 bg-slate-50 p-2.5 rounded-xl">
+                          <i class="fa-solid fa-utensils text-[#B23D1F] mr-1"></i> 대표 메뉴: <span class="text-slate-700 font-bold">{place.menu}</span>
+                        </div>
+                        <p class="text-sm text-slate-600 leading-relaxed font-light mb-6">
+                          {place.reason}
+                        </p>
+                      </div>
+
+                      {/* 🚀 버튼 영역: 길찾기 & 지도 보기 */}
+                      <div class="flex gap-2">
+                        <a 
+                          href={getDirectionsUrl(place.name)}
+                          target="_blank"
+                          rel="noreferrer"
+                          class="flex-1 py-2.5 bg-[#B23D1F] hover:bg-[#8e3119] text-white text-xs font-bold rounded-xl text-center transition-colors block"
+                        >
+                          <i class="fa-solid fa-[#fa-route] fa-diamond-turn-right mr-1"></i> 길찾기
+                        </a>
+                        <a 
+                          href={`https://map.naver.com/v5/search/${encodeURIComponent(place.name)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-xl text-center transition-colors block"
+                        >
+                          지도 상세 <i class="fa-solid fa-arrow-up-right-from-square ml-0.5 text-[10px]"></i>
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </section>
@@ -240,7 +286,6 @@
                 <h2 class="text-3xl font-bold tracking-tight text-slate-800">Community Feed</h2>
               </div>
 
-              {/* POST FORM */}
               <div class="bg-white border border-slate-100 rounded-3xl p-6 mb-12 shadow-sm">
                 <form onSubmit={postFeedback} class="space-y-4">
                   <input 
@@ -262,7 +307,6 @@
                 </form>
               </div>
 
-              {/* FEED LIST */}
               <div class="space-y-6">
                 {feedbacks.length > 0 ? feedbacks.map((fb) => (
                   <div key={fb.id} class="bg-white border border-slate-100 rounded-3xl p-6 hover:shadow-md transition-shadow">
