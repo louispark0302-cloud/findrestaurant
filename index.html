@@ -128,7 +128,7 @@
             alert(data.error || "추천 정보를 가져오는 도중 오류가 발생했습니다.");
           }
         } catch (err) { 
-          alert("서버 연결 실패: " + err.message); 
+          alert("서버 통신 실패: " + err.message); 
         } finally {
           setLoading(false);
         }
@@ -156,11 +156,9 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
       };
 
-      // 🗺️ 네이버 길찾기 URL 생성 함수
       const getDirectionsUrl = (placeName) => {
         const dest = encodeURIComponent(placeName);
         if (location) {
-          // 출발지 좌표(현재 위치) -> 도착지 식당명
           return `https://map.naver.com/v5/directions/${location.lng},${location.lat},내위치,,ADDRESS_POI/-/-/-/sroute?e=${dest}`;
         }
         return `https://map.naver.com/v5/search/${dest}`;
@@ -226,7 +224,7 @@
               </button>
             </div>
 
-            {/* AI RESULT CARD GRID */}
+            {/* AI RESULT CARDS (가로 3열) */}
             {places.length > 0 && (
               <div class="max-w-6xl mx-auto mt-12 px-2">
                 <div class="flex items-center gap-3 mb-6">
@@ -253,7 +251,6 @@
                         </p>
                       </div>
 
-                      {/* 🚀 버튼 영역: 길찾기 & 지도 보기 */}
                       <div class="flex gap-2">
                         <a 
                           href={getDirectionsUrl(place.name)}
@@ -261,7 +258,7 @@
                           rel="noreferrer"
                           class="flex-1 py-2.5 bg-[#B23D1F] hover:bg-[#8e3119] text-white text-xs font-bold rounded-xl text-center transition-colors block"
                         >
-                          <i class="fa-solid fa-[#fa-route] fa-diamond-turn-right mr-1"></i> 길찾기
+                          <i class="fa-solid fa-diamond-turn-right mr-1"></i> 길찾기
                         </a>
                         <a 
                           href={`https://map.naver.com/v5/search/${encodeURIComponent(place.name)}`}
