@@ -1,4 +1,4 @@
-const { GoogleGenAI } = require('@google/genai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 module.exports = async function handler(req, res) {
   // 항상 JSON 응답 헤더 설정
@@ -20,20 +20,22 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
+    const genAI = new GoogleGenerativeAI(apiKey);
+    
+    // 구글 검색 도구(Google Search) 활성화
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-1.5-flash',
+      tools: [{ googleSearch: {} }]
+    });
 
     const prompt = `
-[사용자 위치 정보]
-- 위도: ${latitude || 37.5665}
-- 경도: ${longitude || 126.9780}
-- 위치/주소: "${address || '위치 정보 기반 동네'}"
-
-[사용자 기분/요청]
-- "${mood}"
+현재 사용자 위치 정보: 위도 ${latitude || 37.5665}, 경도 ${longitude || 126.9780} (${address || '현재 위치'})
+사용자 기분/원하는 분위기: "${mood}"
 
 [요구사항]
-1. 위 위치 근처에서 실제 영업 중인 대표 맛집 3곳을 추천해주세요.
-2. 마크다운 태그나 인사말 없이 오직 pure JSON Array 데이터만 응답하세요.
+1. 위 위도/경도(또는 주소) 기준 반경 2km 이내에서 **현재 정상 영업 중인 실제 음식점 3곳**을 구글 검색을 통해 찾으세요.
+2. 폐업했거나 멀리 떨어진 타 지역 식당은 절대로 포함하지 마세요.
+3. 다른 서술문이나 마크다운 설명 없이, 오직 아래 **JSON 배열 양식**으로만 응답하세요.
 
 [응답 JSON 양식]
 [
@@ -46,31 +48,21 @@ module.exports = async function handler(req, res) {
 ]
 `;
 
-    // gemini-2.0-flash 사용
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: prompt
-    });
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let rawText = response.text() || '';
 
-    let rawText = response.text || '';
-    
     // JSON 배열 부분만 정규식으로 안전하게 추출
     const jsonMatch = rawText.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      throw new Error('AI 결과에서 JSON 형식을 추출하지 못했습니다.');
+      throw new Error('AI 응답에서 JSON 데이터 형식을 찾을 수 없습니다.');
     }
 
     const places = JSON.parse(jsonMatch[0]);
     return res.status(200).json({ result: places });
 
   } catch (error) {
-    console.error('Gemini API Error Detail:', error);
-    
-    // 429 할당량 초과 에러일 경우 친절한 안내
-    if (error.message && error.message.includes('429')) {
-      return res.status(429).json({ error: 'Gemini API 호출 한도(Quota)가 초과되었습니다. 잠시 후 다시 시도해 주세요.' });
-    }
-
-    return res.status(500).json({ error: `추천 생성 실패: ${error.message || '알 수 없는 오류'}` });
+    console.error('Server Error:', error);
+    return res.status(500).json({ error: `추천 생성 중 오류 발생: ${error.message || '서버 오류'}` });
   }
 };
