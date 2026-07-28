@@ -83,7 +83,7 @@
         }
       }, []);
 
-      // Firebase Subscription
+      // Firebase
       useEffect(() => {
         const checkFirebase = setInterval(() => {
           if (window.Firebase) {
@@ -124,15 +124,23 @@
               mood: mood.trim() 
             })
           });
-          
-          const data = await res.json();
+
+          // 안전한 JSON 파싱 처리
+          const textRes = await res.text();
+          let data;
+          try {
+            data = JSON.parse(textRes);
+          } catch (e) {
+            throw new Error(`서버 응답 형식 오류 (HTML/텍스트 반환됨)`);
+          }
+
           if (res.ok && Array.isArray(data.result)) {
             setPlaces(data.result);
           } else {
-            alert(data.error || "추천을 불러오는 중 오류가 발생했습니다.");
+            alert(data.error || "추천 정보를 가져오는 도중 에러가 발생했습니다.");
           }
         } catch (err) { 
-          alert("서버 통신 실패: " + err.message); 
+          alert("오류 발생: " + err.message); 
         } finally {
           setLoading(false);
         }
